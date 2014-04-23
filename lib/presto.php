@@ -59,10 +59,11 @@ class Presto extends REST {
 	private static function autoload_explicit($class) {
 		// First look in the base directory for the web app
 		$class_file = strtolower($class) . ".php";
-		if (file_exists($class_file))
+
+		if (stream_resolve_include_path($class_file))
 			return require_once($class_file);
 
-		throw new Exception("API `$class` not found.", 404);
+		throw new Exception("API `$class` not found as $class_file in: " . get_include_path(), 404);
 	}
 	
 	/* Dispatch requests to classes and class methods */
