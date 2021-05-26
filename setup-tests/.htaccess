@@ -1,0 +1,19 @@
+Options +FollowSymlinks
+
+<IfModule mod_rewrite.c>
+
+RewriteEngine On
+RewriteBase /
+
+# Route API requests
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule (.*)\.(.*)$ /setup-tests/delegator-index.php?r=$1&t=$2 [L,QSA]
+
+# General requests (enable for standard php/index delegate behaviour)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule (.*) /setup-tests/index.php?presto&$1 [L]
+
+</IfModule>
+
+ErrorDocument 404 /setup-tests/index.php?presto&e=404&$1
+ErrorDocument 500 /setup-tests/index.php?presto&e=500&$1

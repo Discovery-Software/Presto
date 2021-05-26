@@ -14,17 +14,16 @@
 class info extends API {
 
 	public function __construct() {
-		parent::__construct(get_class(), 'presto-example-1');
-
-		// other startup here
+		parent::__construct('presto-example-1');
+		// other startup would go here
 	}
 
 	// info.json (root get request)
-	public function get($ctx) {
+	public function get($p) {
 
-		$this->restrictTo('json');
+		$this->restrictTo(array('json', 'js'));
 
-		if (count($ctx->params) > 1)
+		if (count($p) > 1)
 			throw new Exception('Too many parameters', 400); // will result in a proper 400 HTTP status
 
 		return array('example' => 'This is some example information'); // will be returned as json, if json is requested
@@ -32,22 +31,41 @@ class info extends API {
 
 	// Test custom header values
 	public function get_header_test($ctx) {
-		$this->restrictTo('json');
+		$this->restrictTo(array('json', 'js'));
 
 		$this->status(201);
 		$this->add_header('CUSTOM_HEADER', 'TEST');
 		return array('test' => 'ok');
 	}
 
-	// Test binary json values
+	// Test binary json values (this should fail)
 	public function get_utf8($ctx) {
 
-		$this->restrictTo('json');
+		$this->restrictTo(array('json', 'js'));
 		return array('status' => 'fail', 'expected' => 'fail', 'invalidUTF8' => pack("H*" ,'c32e') );
 	}
 
+	// Get the PHP version on this server
 	public function get_php_version() {
-
 		return array(phpinfo());
+	}
+	
+	// Get a test image
+	public function get_image($p, $o, $b, $t) {
+		$this->restrictTo(array('png'));
+		$this->add_header('Content-Type', 'image/png');		
+		
+		return (string) file_get_contents('test-image.png');
+	}
+	
+	// Tests a s2s call
+	public function get_service_test($p, $o, $b, $t) {
+		$s = new service(array(
+			'service' => 'http://presto.test/setup-tests/'
+		));
+		
+		$d = $s->get_info('header_test.json');
+		
+		return array('status' => 'ok', 's2s' => $s);		
 	}
 }

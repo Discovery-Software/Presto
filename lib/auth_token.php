@@ -1,5 +1,5 @@
 <?php
-/** Authentication tokens
+/* Authentication tokens
 
 Useful as a GET parameter, header value, or cookie value. Tokens are both encryped and
 validated with a hash value, and can contain a few Kb of key/value pairs.
@@ -12,7 +12,7 @@ validated with a hash value, and can contain a few Kb of key/value pairs.
 	* TOKEN_ENCRYPTION, TOKEN_SIGNING_KEY, and SIGNING_INIT before
 	  working with a token
 
-## Yet TODO
+##	TODO
 
 	* support for W rollover
 	* expose R parameters (and define structure) ... pass off to second class?
@@ -84,8 +84,8 @@ class auth_token {
 	private function build($p, $strict = true) {
 
 		// apply defaults
-		$this->set($p['t'], time(), $strict);
-		$this->set($p['w'], 60, $strict);
+		if (!array_key_exists('t', $p)) $this->set($p['t'], time(), $strict);
+		if (!array_key_exists('w', $p)) $this->set($p['w'], 60, $strict);
 
 		// check for required elements
 		foreach (array('name', 'id', 'acct', 'a', 's') as $k)
@@ -100,7 +100,7 @@ class auth_token {
 		$this->p = (object) $p; // objectize for convinience
 
 		// extract capabilities+roles
-		if (strlen($this->p->c)) {
+		if (!empty($this->p->c) && strlen($this->p->c)) {
 			$roles = explode(',', $this->p->c);
 			foreach ($roles as $tuple) {
 				$cap = explode('/', $tuple);

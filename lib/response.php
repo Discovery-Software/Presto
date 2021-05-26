@@ -1,5 +1,9 @@
 <?php
+include_once('encoders/html.php');
 
+/* A PrestoPHP HTTP response
+
+*/
 class Response {
 	private $call;
 	private $sentHeaders = 0;
@@ -12,7 +16,8 @@ class Response {
 			'204' => 'No Content', // (NO BODY)
 			'205' => 'Reset Content', // (NO BODY)
 			'206' => 'Partial Content', // (ADD'L HEADERS)
-			
+
+			'303' => 'See other',
 			'304' => 'Not modified',
 
 			'400' => 'Bad request',
@@ -44,13 +49,46 @@ class Response {
 
 		// register default type handlers
 
+		// JSON
 		self::add_type_handler('application/json', function ($dom) {
 			$json = json_encode($dom);
-			if (json_last_error() !== JSON_ERROR_NONE) throw new Exception('JSON encoding error #' . json_last_error(), 400);
+			if (json_last_error() !== JSON_ERROR_NONE) throw new \Exception('JSON encoding error #' . json_last_error(), 400);
 			print $json;
 		} );
 
+		// JSONP
+		self::add_type_handler('application/js', function ($dom, $ctx, $map) {
+
+			if ($ctx === null || !array_key_exists('callback', $ctx->options))
+				throw new \Exception('JSONP missing callback option', 400);
+
+			$callback = $ctx->options['callback'];
+
+			if (strlen($callback) === 0 || !preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*$/', $callback))
+				throw new \Exception("Invalid JSONP callback name: $callback", 400);
+
+			$json = json_encode($dom);
+
+			if (json_last_error() !== JSON_ERROR_NONE)
+				throw new \Exception('JSON encoding error in JSONP request - #' . json_last_error(), 400);
+
+			print "$callback($json);";
+		} );
+
+		// Built in HTML
 		self::add_type_handler('.*\/htm.*', function($dom) { _encode_html($dom); } );
+
+		// very basic CSV
+		self::add_type_handler('text/csv', function ($dom) {
+			$csv = '';
+			foreach ($dom as $row)
+				$csv .= implode( ', ', array_map( function($i) {
+					if (is_array($i)) return implode(', ', $i);
+					else return $i;
+				}, $row )) . "\n";
+
+			print $csv;
+		} );
 
 		if (PRESTO_DEBUG) self::add_type_handler('text/plain', function ($dom) { print_r($dom); } );
 	}
@@ -68,7 +106,7 @@ class Response {
 		if (!$this->hdr($c, $h))
 			return false; // returns if status does not allow a body
 
-		if ($enc) return self::encode($this->content_type(), $ctx->data);
+		if ($enc) return self::encode($this->content_type(), $ctx->data, $ctx);
 		else return print $ctx->data;
 	}
 	/* Respond with a failure */
@@ -80,10 +118,10 @@ class Response {
 	/* Generate an appropriate HTTP header */
 	public function hdr($c = '200', $h = null) {
 		$message = array_key_exists($c, $this->codes) ? $this->codes[$c] : 'Internal error';
-		
+
 		if ($this->sentHeaders) return true;
 		else $this->sentHeaders = 1;
-		
+
 		$v = defined('SERVICE_VERSION') ? SERVICE_VERSION : PRESTO_VERSION;
 		header("HTTP/1.0 {$c} {$message}");
 		header(VERSION_HEADER . ': ' . $v);
@@ -103,26 +141,35 @@ class Response {
 		return true;
 	}
 
+	/* Redirect client */
+	public function redirect($t = '500.html', $o = array(), $c = '301') {
+		$t = preg_match('#^http(?:s|)://#', $t) ? $t : "/$t";
+
+		return $this->hdr($c, array_merge($o, array('Location' => $t)));
+	}
+
 	/** Determine the content-type */
 	private function content_type() {
-		if (!isset($this->call) || empty($this->call->res))
+		if (!isset($this->call) || empty($this->call->type))
 			return 'text/plain';
 
-		if (strpos($this->call->res, '/')) return $this->call->res; // already a content-type
+		if (isset($this->call->type) && strpos($this->call->type, '/'))
+			return $this->call->type; // already a content-type
 
-		// map obvious content types (should be an array?)
-		switch ($this->call->res) {
+		// map obvious content types
+		switch ($this->call->type) {
 			case 'html':
 			case 'htm':
 				return 'text/html';
-
+			case 'csv':
+				return 'text/csv';
 			default:
-				return 'application/' . $this->call->res;
+				return 'application/' . $this->call->type;
 		}
 	}
 
 	/* Encode the response using type handlers */
-	private static function encode($type, $dom) {
+	private static function encode($type, $dom, $ctx = array()) {
 		$h = false;
 
 		// find encoder
@@ -136,50 +183,46 @@ class Response {
 
 		if (!$h) throw new Exception('Unknown resource type: ' . $type, 500);
 
-		$encode = $h->enc;
-		$map = $h->map;
-		$encode($dom, $map);
+		$encoder_fn = $h->enc;
+		$encoder_fn($dom, (object) $ctx, $h->map);
+	}
+
+	/* Register default type handlers */
+	private function register_default_type_handlers() {
+
+		// JSON
+		self::add_type_handler('application/json', function ($dom) {
+			$json = json_encode($dom);
+			if (json_last_error() !== JSON_ERROR_NONE) throw new Exception('JSON encoding error #' . json_last_error(), 400);
+			print $json;
+		} );
+
+		// JSONP
+		self::add_type_handler('application/js', function ($dom, $ctx, $map) {
+
+			if ($ctx === null || !array_key_exists('callback', $ctx->options))
+				throw new Exception('JSONP missing callback option', 400);
+
+			$callback = $ctx->options['callback'];
+
+			if (strlen($callback) === 0 || !preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*$/', $callback))
+				throw new Exception("Invalid JSONP callback name: $callback", 400);
+
+			$json = json_encode($dom);
+
+			if (json_last_error() !== JSON_ERROR_NONE)
+				throw new Exception('JSON encoding error in JSONP request - #' . json_last_error(), 400);
+
+			print "$callback($json);";
+		} );
+
+		// Built in HTML
+		self::add_type_handler('.*\/htm.*', function($dom) { _encode_html($dom); } );
+
+		// Build in text (debug only)
+		if (PRESTO_DEBUG)
+			self::add_type_handler('text/plain', function ($dom) { print_r($dom); } );
 	}
 
 	public function __toString() { return print_r($this, true); }
 }
-
-/* Simple HTML encoder */
-function _encode_html($node,  $map = null) {
-	static $d = 0;
-	static $mapper;
-
-	if ($mapper === null && $map !== null) $mapper = $map;
-
-	if (!isset($d) || $map !== null) {
-		$d = -1;
-		return _encode_html(array('html' => array('body' => $node)));
-	}
-
-	$indent = str_repeat("\t", $d);	// indent for pretty printing
-
-	if (is_string($node)) return print "\n$indent$node";
-	elseif (is_array($node)) {
-
-		// descend into child nodes
-
-		$d++;
-		foreach ($node as $k => &$v) {
-			$a = '';
-
-			if (empty($k) || is_numeric($k))
-				$k = 'li'; // assume lists are LIs
-
-			if (is_callable($mapper))
-				$k = $mapper($k, $v, $a, $d);
-
-			// print node
-
-			print "\n$indent<$k$a>";
-			_encode_html($v); // recurse
-			print "\n$indent</$k>";
-		}
-		$d--;
-	}
-}
-
