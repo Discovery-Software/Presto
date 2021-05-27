@@ -65,7 +65,7 @@
 	<p>The document you were looking for wasn't found.</p>
 <?php } else {
 
-	if (!(include('lib/markdown/markdown.php')))
+	if (!(include('lib/markdown/Michelf/Markdown.php')))
 		$text = "<h1>Installation error</h1><p>Your installation is missing the markdown submodule. Please run <code>git submodule init; git submodule update</code> from the Presto root.</p>";
 	else {
 		$text = Markdown(file_get_contents($file));
